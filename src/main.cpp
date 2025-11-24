@@ -1,4 +1,19 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <time.h>
+#include "secrets.h"
+
+const char* ssid = SECRET_SSID2_4;
+const char* password = SECRET_SSID_PASS;
+const char* hostname = "esp12f-magicfit2";
+IPAddress AP_IP(10,1,1,1);
+IPAddress AP_subnet(255,255,255,0);
+
+struct WifiConf {
+  char wifi_ssid[50];
+  char wifi_password[50];
+  char cstr_terminator = 0;
+};
 
 const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
@@ -6,6 +21,12 @@ const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
 const uint8_t button1 = 13;
 const uint8_t button2 = 14;
 const uint8_t led = 48; // onboard
+bool colonOn = true;
+unsigned long lastColonChange = 0;
+unsigned long lastTimeUpdate = 0;
+unsigned long lastNTPSync = 0;
+const unsigned long NTP_INTERVAL = 3600000UL;
+uint8_t displayDigits[4] = {8,8,8,8}; // 88:88 digit test
 
 // bits 0..6 = a..g
 const uint8_t digits[10] = {
@@ -21,15 +42,15 @@ const uint8_t digits[10] = {
     0b01101111  //9
 };
 
-uint8_t displayDigits[4] = {1,2,3,4}; // shows 12:34
-bool colonOn = true;
-unsigned long lastColonChange = 0;
-
 void setSegmentsFor(uint8_t val);
 void showDigit(uint8_t pos, uint8_t val);
 void updateColon();
+void displayTime();
+void NTPsync();
 
 void setup() {
+    Serial.begin(115200);
+    Serial.println("Starting up...");
     for (uint8_t i=0;i<7;i++){
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
@@ -40,12 +61,40 @@ void setup() {
     }
     pinMode(colon, OUTPUT);
     digitalWrite(colon, LOW);
+    pinMode(led, OUTPUT);
+    digitalWrite(led, LOW);
+    Serial.println("Connecting to WiFi...");
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi connected!");
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    Serial.println("Waiting for time...");
+    struct tm timeinfo;
+    while (!getLocalTime(&timeinfo)) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nTime synchronized!");
 }
 
 void loop() {
     updateColon();
+
+    if (millis() - lastTimeUpdate >= 1000) {
+        lastTimeUpdate = millis();
+        displayTime();
+    }
+
     for (uint8_t pos=0; pos<4; pos++){
         showDigit(pos, displayDigits[pos]);
+    }
+
+    if (millis() - lastNTPSync >= NTP_INTERVAL) {
+        lastNTPSync = millis();
+        NTPsync();
     }
 }
 
@@ -78,4 +127,46 @@ void updateColon() {
         lastColonChange = now;
         digitalWrite(colon, HIGH);
     }
+}
+
+void displayTime() {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+        int hour = timeinfo.tm_hour;
+        int minute = timeinfo.tm_min;
+
+        displayDigits[0] = hour / 10;
+        displayDigits[1] = hour % 10;
+        displayDigits[2] = minute / 10;
+        displayDigits[3] = minute % 10;
+    }
+}
+
+void NTPsync() {
+    Serial.println("NTP sync requested...");
+
+    // Make sure WiFi is connected
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi not connected, reconnecting...");
+        WiFi.reconnect();
+        delay(500);
+        return;
+    }
+
+    // Request new time from NTP servers
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+    struct tm timeinfo;
+    unsigned long startAttempt = millis();
+
+    // Try up to 3 seconds to get a valid time
+    while (!getLocalTime(&timeinfo)) {
+        if (millis() - startAttempt > 3000) {
+            Serial.println("NTP sync failed.");
+            return;  // fail gracefully
+        }
+        delay(100);
+    }
+
+    Serial.println("NTP sync complete!");
 }
