@@ -1,11 +1,12 @@
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <WiFi.h>
 #include <time.h>
 #include "secrets.h"
 
 const char* ssid = SECRET_SSID2_4;
 const char* password = SECRET_SSID_PASS;
-const char* hostname = "esp12f-magicfit2";
+const char* hostname = "NTPClock";
 IPAddress AP_IP(10,1,1,1);
 IPAddress AP_subnet(255,255,255,0);
 
@@ -49,7 +50,7 @@ void displayTime();
 void NTPsync();
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
     Serial.println("Starting up...");
     for (uint8_t i=0;i<7;i++){
         pinMode(segPins[i], OUTPUT);
@@ -70,6 +71,25 @@ void setup() {
         Serial.print(".");
     }
     Serial.println("\nWiFi connected!");
+    ArduinoOTA.setHostname(hostname);
+    ArduinoOTA
+    .onStart([]() {
+        Serial.println("OTA Update Started");
+    })
+    .onEnd([]() {
+        Serial.println("\nOTA Update Finished");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("OTA Progress: %u%%\r", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+        Serial.printf("OTA Error[%u]\n", error);
+    });
+
+    ArduinoOTA.begin();
+    Serial.println("OTA Ready");
+    setenv("TZ", "MST7", 1);
+    tzset();
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
     Serial.println("Waiting for time...");
     struct tm timeinfo;
@@ -81,6 +101,7 @@ void setup() {
 }
 
 void loop() {
+    ArduinoOTA.handle();
     updateColon();
 
     if (millis() - lastTimeUpdate >= 1000) {
