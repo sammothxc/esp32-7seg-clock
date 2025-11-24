@@ -88,7 +88,7 @@ void setup() {
 
     ArduinoOTA.begin();
     Serial.println("OTA Ready");
-    setenv("TZ", "MST7", 1);
+    setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0/2", 1);
     tzset();
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
     Serial.println("Waiting for time...");
