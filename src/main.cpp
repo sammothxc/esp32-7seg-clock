@@ -50,7 +50,7 @@ void displayTime();
 void NTPsync();
 
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     Serial.println("Starting up...");
     for (uint8_t i=0;i<7;i++){
         pinMode(segPins[i], OUTPUT);
@@ -71,6 +71,8 @@ void setup() {
         Serial.print(".");
     }
     Serial.println("\nWiFi connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
     ArduinoOTA.setHostname(hostname);
     ArduinoOTA
     .onStart([]() {
