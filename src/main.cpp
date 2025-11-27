@@ -13,6 +13,10 @@ struct WifiConf {
   char cstr_terminator = 0;
 };
 
+const long  gmtOffset_sec = -7 * 3600; // MST
+const int   daylightOffset_sec = 3600; // MDT
+const char* ntpServer1 = "pool.ntp.org";
+const char* ntpServer2 = "time.nist.gov";
 const char* pass = "ntp-clock-pass";
 const char* hostname = "ntp-clock";
 IPAddress AP_IP(10,1,1,1);
@@ -51,6 +55,7 @@ void writeWifiConf();
 bool connectToWiFi();
 void setUpAccessPoint();
 void handleWebServerRequest(AsyncWebServerRequest *request);
+void startMDNS();
 void setUpWebServer();
 void setSegmentsFor(uint8_t val);
 void showDigit(uint8_t pos, uint8_t val);
@@ -76,24 +81,10 @@ void setup() {
     EEPROM.begin(512);
     readWifiConf();
     if(!connectToWiFi()){ setUpAccessPoint(); }
-    if (!MDNS.begin(hostname)) { //http://ntp-clock.local
-        Serial.println("Error setting up MDNS responder!");
-        while (1) {
-        delay(1000);
-        }
-    }
-    Serial.println("mDNS responder started");
+    startMDNS();
     setUpWebServer();
-    setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0/2", 1);
-    tzset();
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    Serial.println("Waiting for time...");
-    struct tm timeinfo;
-    while (!getLocalTime(&timeinfo)) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nTime synchronized!");
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
+    NTPsync();
 }
 
 void loop() {
@@ -160,23 +151,16 @@ void displayTime() {
 }
 
 void NTPsync() {
+    unsigned long startAttempt = millis();
+    struct tm timeinfo;
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
     Serial.println("NTP sync requested...");
-
-    // Make sure WiFi is connected
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("WiFi not connected, reconnecting...");
         WiFi.reconnect();
         delay(500);
         return;
     }
-
-    // Request new time from NTP servers
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-    struct tm timeinfo;
-    unsigned long startAttempt = millis();
-
-    // Try up to 3 seconds to get a valid time
     while (!getLocalTime(&timeinfo)) {
         if (millis() - startAttempt > 3000) {
             Serial.println("NTP sync failed.");
@@ -184,7 +168,6 @@ void NTPsync() {
         }
         delay(100);
     }
-
     Serial.println("NTP sync complete!");
 }
 
@@ -256,4 +239,14 @@ void setUpWebServer() {
     Serial.println("ElegantOTA server started");
     server.begin();
     Serial.println("Web server started");
+}
+
+void startMDNS() {
+    if (!MDNS.begin(hostname)) { //http://ntp-clock.local
+        Serial.println("Error setting up MDNS responder!");
+        while (1) {
+        delay(1000);
+        }
+    }
+    Serial.println("mDNS responder started");
 }
