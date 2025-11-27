@@ -148,7 +148,8 @@ void updateColon() {
 void displayTime() {
     struct tm timeinfo;
     if (getLocalTime(&timeinfo)) {
-        int hour = timeinfo.tm_hour;
+        int rawHour = timeinfo.tm_hour;
+        int hour = (rawHour - 7 + 24) % 24;
         int minute = timeinfo.tm_min;
 
         displayDigits[0] = hour / 10;
