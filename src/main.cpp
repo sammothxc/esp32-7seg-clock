@@ -5,16 +5,7 @@
 #include <ElegantOTA.h>
 #include <ESPmDNS.h>
 #include <time.h>
-#include "secrets.h"
-#include "resources.h"
-
-const char* ssid = SECRET_SSID2_4;
-const char* password = SECRET_SSID_PASS;
-const char* pass = SECRET_PASS;
-const char* hostname = "ntp-clock";
-IPAddress AP_IP(10,1,1,1);
-IPAddress AP_subnet(255,255,255,0);
-AsyncWebServer server(80);
+#include <EEPROM.h>
 
 struct WifiConf {
   char wifi_ssid[50];
@@ -22,6 +13,12 @@ struct WifiConf {
   char cstr_terminator = 0;
 };
 
+const char* pass = "ntp-clock-pass";
+const char* hostname = "ntp-clock";
+IPAddress AP_IP(10,1,1,1);
+IPAddress AP_subnet(255,255,255,0);
+AsyncWebServer server(80);
+WifiConf wifiConf;
 const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
@@ -49,6 +46,12 @@ const uint8_t digits[10] = {
     0b01101111  //9
 };
 
+void readWifiConf();
+void writeWifiConf();
+bool connectToWiFi();
+void setUpAccessPoint();
+void handleWebServerRequest(AsyncWebServerRequest *request);
+void setUpWebServer();
 void setSegmentsFor(uint8_t val);
 void showDigit(uint8_t pos, uint8_t val);
 void updateColon();
@@ -70,15 +73,9 @@ void setup() {
     digitalWrite(colon, LOW);
     pinMode(led, OUTPUT);
     digitalWrite(led, LOW);
-    Serial.println("Connecting to WiFi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi connected!");
-    Serial.println(WiFi.localIP());
+    EEPROM.begin(512);
+    readWifiConf();
+    if(!connectToWiFi()){ setUpAccessPoint(); }
     if (!MDNS.begin(hostname)) { //http://ntp-clock.local
         Serial.println("Error setting up MDNS responder!");
         while (1) {
@@ -86,13 +83,7 @@ void setup() {
         }
     }
     Serial.println("mDNS responder started");
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/plain", "Hi! This is NTP Clock :)");
-    });
-    ElegantOTA.setAuth("admin", pass);
-    ElegantOTA.begin(&server);
-    server.begin();
-    Serial.println("ElegantOTA server started");
+    setUpWebServer();
     setenv("TZ", "MST7MDT,M3.2.0/2,M11.1.0/2", 1);
     tzset();
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -194,4 +185,74 @@ void NTPsync() {
     }
 
     Serial.println("NTP sync complete!");
+}
+
+void readWifiConf() {
+    for (size_t i = 0; i < sizeof(wifiConf); i++)
+        ((char*)(&wifiConf))[i] = char(EEPROM.read(i));
+    wifiConf.cstr_terminator = 0;
+}
+
+void writeWifiConf() {
+    for (size_t i = 0; i < sizeof(wifiConf); i++)
+        EEPROM.write(i, ((char*)(&wifiConf))[i]);
+    EEPROM.commit();
+}
+
+bool connectToWiFi() {
+    Serial.printf("Connecting to '%s'\n", wifiConf.wifi_ssid);
+    WiFi.mode(WIFI_STA);
+    WiFi.setHostname(hostname);
+    WiFi.begin(wifiConf.wifi_ssid, wifiConf.wifi_password);
+    if (WiFi.waitForConnectResult() == WL_CONNECTED) {
+        Serial.print("Connected. IP: "); Serial.println(WiFi.localIP());
+        return true;
+    } 
+    Serial.println("Connection failed");
+    return false;
+}
+
+void setUpAccessPoint() {
+    Serial.println("Setting up AP");
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAPConfig(AP_IP, AP_IP, AP_subnet);
+    WiFi.softAP(hostname, pass);
+    Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+}
+
+void handleWebServerRequest(AsyncWebServerRequest *request) {
+  bool save=false;
+  if(request->hasParam("ssid",true) && request->hasParam("password",true)){
+    String s=request->getParam("ssid",true)->value();
+    String p=request->getParam("password",true)->value();
+    s.toCharArray(wifiConf.wifi_ssid,sizeof(wifiConf.wifi_ssid));
+    p.toCharArray(wifiConf.wifi_password,sizeof(wifiConf.wifi_password));
+    writeWifiConf(); save=true;
+  }
+
+  String msg = "<!DOCTYPE html><html><head><title>ESP Wifi Config</title></head><body>";
+  if(save){ msg += "<div>Saved! Rebooting...</div>"; } 
+  else{
+    msg += "<h1>ESP Wifi Config</h1><form action='/wifi' method='POST'>";
+    msg += "<div>SSID:</div><input type='text' name='ssid' value='"+String(wifiConf.wifi_ssid)+"'/>";
+    msg += "<div>Password:</div><input type='password' name='password' value='"+String(wifiConf.wifi_password)+"'/>";
+    msg += "<div><input type='submit' value='Save'/></div></form>";
+  }
+  msg += "</body></html>";
+
+  request->send(200,"text/html",msg);
+  if(save){ request->client()->close(); delay(1000); ESP.restart(); }
+}
+
+void setUpWebServer() {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/plain", "Hi! This is NTP Clock :)");
+    });
+    server.on("/wifi", HTTP_GET, handleWebServerRequest);
+    server.on("/wifi", HTTP_POST, handleWebServerRequest);
+    ElegantOTA.setAuth("admin", pass);
+    ElegantOTA.begin(&server);
+    Serial.println("ElegantOTA server started");
+    server.begin();
+    Serial.println("Web server started");
 }
