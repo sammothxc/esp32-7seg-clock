@@ -11,36 +11,34 @@
 #define EEPROM_MAGIC 0xA55A1234
 
 struct EEPROMstorage {
-  char wifi_ssid[50];
-  char wifi_password[50];
-  bool use12HourFormat;
-  char cstr_terminator = 0;
+    uint32_t magic;
+    char wifi_ssid[50];
+    char wifi_password[50];
+    bool use12HourFormat;
+    char cstr_terminator = 0;
 };
 
-const long  gmtOffset_sec = -7 * 3600; // MST
-const int   daylightOffset_sec = 3600; // MDT
+const long gmtOffset_sec = -7 * 3600; // MST
+const int daylightOffset_sec = 3600; // MDT
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
 const char* pass = "ntp-clock-pass";
 const char* hostname = "ntp-clock";
+const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
+const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
+const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
+const unsigned long NTP_INTERVAL = 3600000UL;
+uint8_t displayDigits[4] = {8,8,8,8}; // 88:88 digit test
+bool colonOn = true;
+bool reboot = false;
+unsigned long lastColonChange = 0;
+unsigned long lastTimeUpdate = 0;
+unsigned long lastNTPSync = 0;
+unsigned long rebootAt = 0;
 IPAddress AP_IP(10,1,1,1);
 IPAddress AP_subnet(255,255,255,0);
 AsyncWebServer server(80);
 EEPROMstorage config;
-const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
-const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
-const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
-const uint8_t button1 = 13;
-const uint8_t button2 = 14;
-const uint8_t led = 48; // onboard
-bool colonOn = true;
-unsigned long lastColonChange = 0;
-unsigned long lastTimeUpdate = 0;
-unsigned long lastNTPSync = 0;
-const unsigned long NTP_INTERVAL = 3600000UL;
-uint8_t displayDigits[4] = {8,8,8,8}; // 88:88 digit test
-bool reboot = false;
-unsigned long rebootAt = 0;
 
 // bits 0..6 = a..g
 const uint8_t digits[10] = {
@@ -82,8 +80,6 @@ void setup() {
     }
     pinMode(colon, OUTPUT);
     digitalWrite(colon, LOW);
-    pinMode(led, OUTPUT);
-    digitalWrite(led, LOW);
     EEPROM.begin(EEPROM_SIZE);
     readConf();
     if(!connectToWiFi()){ setUpAccessPoint(); }
@@ -102,15 +98,13 @@ void loop() {
 }
 
 void readConf() {
-    for(size_t i = 0; i < sizeof(config); i++)
-        ((char*)(&config))[i] = char(EEPROM.read(i));
-    config.cstr_terminator = 0;
-}
-
-void checkConf() {
-    if(config.cstr_terminator != 0) {
-        Serial.println("No valid config found, using defaults.");
-        memset(&config, 0, sizeof(config));
+    for (size_t i = 0; i < sizeof(EEPROMstorage); i++) {
+        ((uint8_t*)&config)[i] = EEPROM.read(i);
+    }
+    if (config.magic != EEPROM_MAGIC) {
+        Serial.println("EEPROM not initialized or corrupt. Loading defaults...");
+        memset(&config, 0, sizeof(EEPROMstorage));
+        config.magic = EEPROM_MAGIC;
         strcpy(config.wifi_ssid, "your-ssid");
         strcpy(config.wifi_password, "your-password");
         config.use12HourFormat = false;
@@ -119,8 +113,9 @@ void checkConf() {
 }
 
 void writeConf() {
-    for(size_t i = 0; i < sizeof(config); i++)
-        EEPROM.write(i, ((char*)(&config))[i]);
+    for (size_t i = 0; i < sizeof(EEPROMstorage); i++) {
+        EEPROM.write(i, ((uint8_t*)&config)[i]);
+    }
     EEPROM.commit();
 }
 
