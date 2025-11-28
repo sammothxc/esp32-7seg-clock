@@ -7,7 +7,10 @@
 #include <time.h>
 #include <EEPROM.h>
 
-struct EEPROMConf {
+#define EEPROM_SIZE 512
+#define EEPROM_MAGIC 0xA55A1234
+
+struct EEPROMstorage {
   char wifi_ssid[50];
   char wifi_password[50];
   bool use12HourFormat;
@@ -23,7 +26,7 @@ const char* hostname = "ntp-clock";
 IPAddress AP_IP(10,1,1,1);
 IPAddress AP_subnet(255,255,255,0);
 AsyncWebServer server(80);
-EEPROMConf eepromConf;
+EEPROMstorage config;
 const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
@@ -81,7 +84,7 @@ void setup() {
     digitalWrite(colon, LOW);
     pinMode(led, OUTPUT);
     digitalWrite(led, LOW);
-    EEPROM.begin(512);
+    EEPROM.begin(EEPROM_SIZE);
     readConf();
     if(!connectToWiFi()){ setUpAccessPoint(); }
     startMDNS();
@@ -99,33 +102,33 @@ void loop() {
 }
 
 void readConf() {
-    for(size_t i = 0; i < sizeof(eepromConf); i++)
-        ((char*)(&eepromConf))[i] = char(EEPROM.read(i));
-    eepromConf.cstr_terminator = 0;
+    for(size_t i = 0; i < sizeof(config); i++)
+        ((char*)(&config))[i] = char(EEPROM.read(i));
+    config.cstr_terminator = 0;
 }
 
 void checkConf() {
-    if(eepromConf.cstr_terminator != 0) {
+    if(config.cstr_terminator != 0) {
         Serial.println("No valid config found, using defaults.");
-        memset(&eepromConf, 0, sizeof(eepromConf));
-        strcpy(eepromConf.wifi_ssid, "your-ssid");
-        strcpy(eepromConf.wifi_password, "your-password");
-        eepromConf.use12HourFormat = false;
+        memset(&config, 0, sizeof(config));
+        strcpy(config.wifi_ssid, "your-ssid");
+        strcpy(config.wifi_password, "your-password");
+        config.use12HourFormat = false;
         writeConf();
     }
 }
 
 void writeConf() {
-    for(size_t i = 0; i < sizeof(eepromConf); i++)
-        EEPROM.write(i, ((char*)(&eepromConf))[i]);
+    for(size_t i = 0; i < sizeof(config); i++)
+        EEPROM.write(i, ((char*)(&config))[i]);
     EEPROM.commit();
 }
 
 bool connectToWiFi() {
-    Serial.printf("Connecting to '%s'\n", eepromConf.wifi_ssid);
+    Serial.printf("Connecting to '%s'\n", config.wifi_ssid);
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(hostname);
-    WiFi.begin(eepromConf.wifi_ssid, eepromConf.wifi_password);
+    WiFi.begin(config.wifi_ssid, config.wifi_password);
     if(WiFi.waitForConnectResult() == WL_CONNECTED) {
         Serial.print("Connected. IP: "); Serial.println(WiFi.localIP());
         return true;
@@ -147,24 +150,24 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
     if(request->hasParam("ssid",true) && request->hasParam("password",true)){
         String s=request->getParam("ssid",true)->value();
         String p=request->getParam("password",true)->value();
-        s.toCharArray(eepromConf.wifi_ssid,sizeof(eepromConf.wifi_ssid));
-        p.toCharArray(eepromConf.wifi_password,sizeof(eepromConf.wifi_password));
+        s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
+        p.toCharArray(config.wifi_password,sizeof(config.wifi_password));
         writeConf(); save=true;
     }
     if(request->hasParam("tf", true)) {
         String tf=request->getParam("tf",true)->value();
-        eepromConf.use12HourFormat = (tf == "12");
+        config.use12HourFormat = (tf == "12");
         writeConf(); save=true;
     }
     String msg = "<!DOCTYPE html><html><head><title>NTP Clock Config</title></head><body>";
     if(save){ msg += "<div>Saved! Rebooting...</div>"; } 
     else{
         msg += "<h1>NTP Clock Config</h1><form action='/' method='POST'>";
-        msg += "<div>SSID:</div><input type='text' name='ssid' value='"+String(eepromConf.wifi_ssid)+"'/>";
-        msg += "<div>Password:</div><input type='password' name='password' value='"+String(eepromConf.wifi_password)+"'/>";
+        msg += "<div>SSID:</div><input type='text' name='ssid' value='"+String(config.wifi_ssid)+"'/>";
+        msg += "<div>Password:</div><input type='password' name='password' value='"+String(config.wifi_password)+"'/>";
         msg += "<div>Time Format:</div>";
         msg += "<select name='tf'>";
-        msg += eepromConf.use12HourFormat ?
+        msg += config.use12HourFormat ?
                 "<option value='24'>24-hour</option><option value='12' selected>12-hour</option>" :
                 "<option value='24' selected>24-hour</option><option value='12'>12-hour</option>";
         msg += "</select>";
@@ -238,7 +241,7 @@ void updateTime() {
             int hour = timeinfo.tm_hour;
             int minute = timeinfo.tm_min;
 
-            if(eepromConf.use12HourFormat) {
+            if(config.use12HourFormat) {
                 hour = hour % 12;
                 if(hour == 0) hour = 12;  // midnight/noon correction
             }
