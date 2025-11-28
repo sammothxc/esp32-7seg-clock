@@ -3,7 +3,6 @@
 
 ## TODO
 
-- add ability to display errors
 - add ability to change brightness (using button perchance?)
 - make an actual readme
 - case + build
