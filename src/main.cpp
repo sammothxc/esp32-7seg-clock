@@ -22,8 +22,8 @@ const long gmtOffset_sec = -7 * 3600; // MST
 const int daylightOffset_sec = 3600; // MDT
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
-const char* pass = "ntp-clock-pass";
 const char* hostname = "ntp-clock";
+const char* pass = "ntp-clock-pass";
 const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
@@ -141,10 +141,14 @@ bool connectToWiFi() {
 
 void setUpAccessPoint() {
     Serial.println("Setting up AP");
-    WiFi.mode(WIFI_AP_STA);
+    WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_IP, AP_subnet);
     WiFi.softAP(hostname, pass);
     Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+    Serial.print("SoftAP SSID: "); Serial.println(WiFi.softAPSSID());
+    Serial.print("SoftAP IP: "); Serial.println(WiFi.softAPIP());
+    Serial.print("SoftAP Status: "); Serial.println(WiFi.softAPgetStationNum()); // stations connected
+
 }
 
 void handleWebServerRequest(AsyncWebServerRequest *request) {
