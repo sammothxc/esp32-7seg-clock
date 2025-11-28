@@ -9,6 +9,24 @@
 
 #define TZ -7 // Mountain Time Zone (UTC-7)
 
+// segment pins (cathode pins, drive LOW to turn on segment)
+#define A_PIN 1
+#define B_PIN 2
+#define C_PIN 3
+#define D_PIN 4
+#define E_PIN 5
+#define F_PIN 6
+#define G_PIN 7
+#define DP_PIN 8
+
+// digit pins (anode pins, drive HIGH to enable digit)
+#define D1_PIN 9
+#define D2_PIN 10
+#define D3_PIN 11
+#define D4_PIN 12
+
+#define BUTTON_PIN 13
+#define LED_PIN 48
 #define DIGIT_COUNT 4
 #define EEPROM_SIZE 1024
 #define EEPROM_MAGIC 0xA55A1234
@@ -24,13 +42,66 @@ struct EEPROMstorage {
     uint8_t colonBlinkSlow;
 };
 
-const uint8_t segPins[8] = {1,2,3,4,5,6,7,8}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
-const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
+
+
+enum ErrorType {
+    ERR_NONE,
+    ERR_WIFI,
+    ERR_OTA_FAIL,
+    ERR_SYNC,
+    ERR_EEPROM,
+    ERR_MDNS
+};
+
+struct ErrorDisplayMap {
+    ErrorType type;
+    const char* code;
+};
+
+ErrorDisplayMap errorMap[] = {
+    { ERR_WIFI, "wifi" },
+    { ERR_OTA_FAIL, "fail" },
+    { ERR_SYNC, "sync" },
+    { ERR_EEPROM, "eepr" },
+    { ERR_MDNS, "mdns" }
+};
+
+// bits 0..6 = a..g
+const uint8_t segDigits[10] = {
+    0b00111111, //0
+    0b00000110, //1
+    0b01011011, //2
+    0b01001111, //3
+    0b01100110, //4
+    0b01101101, //5
+    0b01111101, //6
+    0b00000111, //7
+    0b01111111, //8
+    0b01101111  //9
+};
+
+const uint8_t segLetters[14] = {
+    0b01110111, // a
+    0b00111001, // c
+    0b01011110, // d
+    0b01111001, // e
+    0b01110001, // f
+    0b00010000, // i
+    0b00111000, // l
+    0b00110111, // m
+    0b01010100, // n
+    0b01110011, // p
+    0b01010000, // r
+    0b01101101, // s
+    0b00111110, // w
+    0b01101110 // y
+};
+
+const uint8_t segPins[8] = {A_PIN,B_PIN,C_PIN,D_PIN,E_PIN,F_PIN,G_PIN,DP_PIN}; 
+const uint8_t digitPins[4] = {D1_PIN,D2_PIN,D3_PIN,D4_PIN};
 uint8_t displayDigits[DIGIT_COUNT];
-const uint8_t led = 48;
-const uint8_t button = 13;
-const long gmtOffset_sec = TZ * 3600; // MST
-const int daylightOffset_sec = 3600; // MDT
+const long gmtOffset_sec = TZ * 3600;
+const int daylightOffset_sec = 3600;
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
 const char* hostname = "ntp-clock";
@@ -50,20 +121,7 @@ IPAddress AP_IP(10,1,1,1);
 IPAddress AP_subnet(255,255,255,0);
 AsyncWebServer server(80);
 EEPROMstorage config;
-
-// bits 0..6 = a..g
-const uint8_t digits[10] = {
-    0b00111111, //0
-    0b00000110, //1
-    0b01011011, //2
-    0b01001111, //3
-    0b01100110, //4
-    0b01101101, //5
-    0b01111101, //6
-    0b00000111, //7
-    0b01111111, //8
-    0b01101111  //9
-};
+ErrorType activeError = ERR_NONE;
 
 void readConf();
 void writeConf();
@@ -72,25 +130,26 @@ void setUpAccessPoint();
 void handleWebServerRequest(AsyncWebServerRequest *request);
 void startMDNS();
 void setUpWebServer();
-void wifiBlocker();
 void requestReboot();
 void rebootCheck();
 void NTPsync();
 void updateTime();
 void updateColon();
 void display();
+void errorCtrl(ErrorType err);
+uint8_t charTo7Seg(char c);
 
 void setup() {
     Serial.begin(115200);
     Serial.println("Starting up...");
-    pinMode(button, INPUT_PULLUP);
-    pinMode(led, OUTPUT);
-    digitalWrite(led, HIGH);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, HIGH);
     for (uint8_t i=0;i<sizeof(segPins);i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
     }
-    for (uint8_t i=0;i<sizeof(digitPins);i++) {
+    for (uint8_t i=0;i<DIGIT_COUNT;i++) {
         pinMode(digitPins[i], OUTPUT);
         digitalWrite(digitPins[i], LOW);
     }
@@ -101,8 +160,7 @@ void setup() {
     setUpWebServer();
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
     NTPsync();
-    digitalWrite(led, LOW);
-    wifiBlocker();
+    digitalWrite(LED_PIN, LOW);
 }
 
 void loop() {
@@ -119,7 +177,7 @@ void readConf() {
     }
     if (config.magic != EEPROM_MAGIC) {
         Serial.println("EEPROM not initialized or corrupt. Loading defaults...");
-        //TODO errorCtrl();
+        errorCtrl(ERR_EEPROM);
         memset(&config, 0, sizeof(EEPROMstorage));
         config.magic = EEPROM_MAGIC;
         strcpy(config.wifi_ssid, "your-ssid");
@@ -147,10 +205,11 @@ bool connectToWiFi() {
     if (WiFi.waitForConnectResult() == WL_CONNECTED) {
         Serial.print("Connected. IP: "); Serial.println(WiFi.localIP());
         wifiConnected = true;
+        activeError = ERR_NONE;
         return true;
     } 
     Serial.println("Connection failed");
-    //TODO errorCtrl();
+    errorCtrl(ERR_WIFI);
     return false;
 }
 
@@ -243,7 +302,7 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
 void startMDNS() {
     if (!MDNS.begin(hostname)) {
         Serial.println("Error setting up MDNS responder!");
-        //TODO errorCtrl();
+        errorCtrl(ERR_MDNS);
         return;
     }
     Serial.println("mDNS responder started");
@@ -271,32 +330,25 @@ void setUpWebServer() {
         if (millis() - otaProgressMillis > 1000) {
             otaProgressMillis = millis();
             Serial.printf("Progress: %u%%\n", (current * 100) / final);
-            digitalWrite(led, !digitalRead(led));
+            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
         }
         Serial.printf("Progress: %u%%\n", (current * 100) / final);
     });
     ElegantOTA.onEnd([](bool success) {
         otaInProgress = false;
-        digitalWrite(led, LOW);
+        digitalWrite(LED_PIN, LOW);
         if (success) {
             Serial.println("OTA update completed successfully! Restarting...");
             delay(500);
             requestReboot();
         } else {
             Serial.println("OTA update failed :(");
-            //TODO errorCtrl();
+            errorCtrl(ERR_OTA_FAIL);
         }
     });
     Serial.println("ElegantOTA server started");
     server.begin();
     Serial.println("Web server started");
-}
-
-void wifiBlocker() {
-    while(!wifiConnected) {
-        delay(300);
-        digitalWrite(led, !digitalRead(led));
-    }
 }
 
 void requestReboot() {
@@ -305,7 +357,7 @@ void requestReboot() {
 }
 
 void rebootCheck() {
-    if (reboot && millis() >= rebootAt + 2000) {
+    if (reboot && millis() >= rebootAt + (activeError == ERR_NONE ? 2000 : 5000)) {
         server.end();
         delay(500);
         ESP.restart();
@@ -327,7 +379,7 @@ void NTPsync() {
         while (!getLocalTime(&timeinfo)) {
             if (millis() - startAttempt > 3000) {
                 Serial.println("NTP sync failed.");
-                //TODO errorCtrl();
+                errorCtrl(ERR_SYNC);
                 return;
             }
             delay(100);
@@ -337,6 +389,7 @@ void NTPsync() {
 }
 
 void updateTime() {
+    if (activeError != ERR_NONE) return;
     if (millis() - lastTimeUpdate >= 1000) {
         lastTimeUpdate = millis();
         struct tm timeinfo;
@@ -349,15 +402,16 @@ void updateTime() {
                 hour = hour % 12;
                 if (hour == 0) hour = 12;  // midnight/noon correction
             }
-            displayDigits[0] = hour / 10;
-            displayDigits[1] = hour % 10;
-            displayDigits[2] = minute / 10;
-            displayDigits[3] = minute % 10;
+            displayDigits[0] = segDigits[hour / 10];
+            displayDigits[1] = segDigits[hour % 10];
+            displayDigits[2] = segDigits[minute / 10];
+            displayDigits[3] = segDigits[minute % 10];
         }
     }
 }
 
 void updateColon() {
+    if (activeError != ERR_NONE) return;
     if (millis() - lastColonChange >= (config.colonBlinkSlow ? 1000 : 500)) {
         colonOn = !colonOn;
         lastColonChange = millis();
@@ -367,15 +421,15 @@ void updateColon() {
 void display() {
     if (otaInProgress) return;
     for (size_t pos=0; pos<DIGIT_COUNT; pos++) {
-        for (uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
-        uint8_t m = digits[displayDigits[pos]];
+        for (uint8_t i=0;i< DIGIT_COUNT;i++) digitalWrite(digitPins[i], LOW);
+        uint8_t m = displayDigits[pos];
         for (uint8_t s=0;s<sizeof(segPins);s++) {
             bool segmentOn = m & (1 << s);
             if (s == 7) {
-                if (pos == 3 && config.dpEnabled) {
+                if (pos == 3 && config.dpEnabled && activeError == ERR_NONE) {
                     segmentOn = isPM;
                 }
-                if (pos == 1 && config.colonEnabled) {
+                if (pos == 1 && config.colonEnabled && activeError == ERR_NONE) {
                     segmentOn = colonOn;
                 }
             }
@@ -386,4 +440,49 @@ void display() {
         digitalWrite(digitPins[pos], LOW);
         for (uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly(?)
     }
+}
+
+uint8_t charTo7Seg(char c) {
+    if (c >= 'A' && c <= 'Z')
+        c = c - 'A' + 'a';
+    if (c >= '0' && c <= '9')
+        return segDigits[c - '0'];
+    switch (c) {
+        case 'a': return segLetters[0];
+        case 'c': return segLetters[1];
+        case 'd': return segLetters[2];
+        case 'e': return segLetters[3];
+        case 'f': return segLetters[4];
+        case 'i': return segLetters[5];
+        case 'l': return segLetters[6];
+        case 'm': return segLetters[7];
+        case 'n': return segLetters[8];
+        case 'p': return segLetters[9];
+        case 'r': return segLetters[10];
+        case 's': return segLetters[11];
+        case 'w': return segLetters[12];
+        case 'y': return segLetters[13];
+    }
+    return 0b00000000;
+}
+
+void errorCtrl(ErrorType err) {
+    activeError = err;
+    if (err == ERR_NONE) return;
+    const char *code = nullptr;
+    for (auto &m : errorMap) {
+        if (m.type == err) {
+            code = m.code;
+            break;
+        }
+    }
+    if (!code) return; // should never happen
+    for (int i = 0; i < DIGIT_COUNT; i++) {
+        displayDigits[i] = charTo7Seg(code[i]);  
+    }
+
+    Serial.print("ERROR: ");
+    Serial.println(code);
+    if (activeError != ERR_WIFI && activeError != ERR_EEPROM) requestReboot();
+    display();
 }

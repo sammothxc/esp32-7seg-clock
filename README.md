@@ -10,3 +10,14 @@
 
 ## Display Pinout
 ![](include/7seg.png)
+
+## Alphabet
+![](include/7segment_alphabet.jpg)
+
+## Error Codes
+
+- wifi: no wifi connected
+- fail: OTA update failed
+- sync: NTP sync failed
+- eepr: eeprom read error
+- mdns: mdns responder init failed
