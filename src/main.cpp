@@ -20,15 +20,15 @@ struct EEPROMstorage {
     char wifi_ssid[50];
     char wifi_password[50];
     uint8_t use12HourFormat;
-    uint8_t DPenabled;
+    uint8_t dpEnabled;
+    uint8_t colonEnabled;
 };
 
-const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
+const uint8_t segPins[8] = {1,2,3,4,5,6,7,8}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 uint8_t displayDigits[DIGIT_COUNT];
-const uint8_t colon = 8;
 const uint8_t led = 48;
-const uint8_t button = 0;
+const uint8_t button = 13;
 const long gmtOffset_sec = TZ * 3600; // MST
 const int daylightOffset_sec = 3600; // MDT
 const char* ntpServer1 = "pool.ntp.org";
@@ -83,8 +83,6 @@ void setup() {
     pinMode(button, INPUT_PULLUP);
     pinMode(led, OUTPUT);
     digitalWrite(led, HIGH);
-    pinMode(colon, OUTPUT);
-    digitalWrite(colon, LOW);
     for(uint8_t i=0;i<sizeof(segPins);i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
@@ -122,8 +120,9 @@ void readConf() {
         config.magic = EEPROM_MAGIC;
         strcpy(config.wifi_ssid, "your-ssid");
         strcpy(config.wifi_password, "your-password");
-        config.use12HourFormat = false;
-        config.DPenabled = 1;
+        config.use12HourFormat = 1;
+        config.dpEnabled = 1;
+        config.colonEnabled = 1;
         writeConf();
     }
 }
@@ -175,9 +174,18 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
     }
     if (request->method() == HTTP_POST) {
         if (request->hasParam("dp", true)) {
-            config.DPenabled = 1;
+            config.dpEnabled = 1;
         } else {
-            config.DPenabled = 0;
+            config.dpEnabled = 0;
+        }
+        writeConf();
+        save = true;
+    }
+    if (request->method() == HTTP_POST) {
+        if (request->hasParam("colon", true)) {
+            config.colonEnabled = 1;
+        } else {
+            config.colonEnabled = 0;
         }
         writeConf();
         save = true;
@@ -203,7 +211,13 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         msg += "<div>PM Indicator (Decimal Point on 4th digit):</div>";
         msg += "<label>";
         msg += "<input type='checkbox' name='dp' value='1' ";
-        msg += (config.DPenabled ? "checked" : "");
+        msg += (config.dpEnabled ? "checked" : "");
+        msg += "> Enable";
+        msg += "</label>";
+        msg += "<div>Colon (Decimal Point on 2nd digit):</div>";
+        msg += "<label>";
+        msg += "<input type='checkbox' name='colon' value='1' ";
+        msg += (config.colonEnabled ? "checked" : "");
         msg += "> Enable";
         msg += "</label>";
         msg += "<div><input type='submit' value='Save'/></div></form>";
@@ -308,11 +322,9 @@ void updateTime() {
 }
 
 void updateColon() {
-    unsigned long now = millis();
-    if (now - lastColonChange >= COLON_BLINK_INTERVAL) {
+    if (millis() - lastColonChange >= COLON_BLINK_INTERVAL) {
         colonOn = !colonOn;
-        lastColonChange = now;
-        digitalWrite(colon, colonOn ? HIGH : LOW);
+        lastColonChange = millis();
     }
 }
 
@@ -322,8 +334,13 @@ void display() {
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<sizeof(segPins);s++) {
                 bool segmentOn = m & (1 << s);
-                if (pos == 3 && s == 7 && isPM && config.DPenabled) {
-                    segmentOn = true;
+                if (s == 7) {
+                    if (pos == 3 && config.dpEnabled) {
+                        segmentOn = isPM;
+                    }
+                    if (pos == 1 && config.colonEnabled) {
+                        segmentOn = colonOn;
+                    }
                 }
                 digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
             }
