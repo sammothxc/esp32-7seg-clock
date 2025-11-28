@@ -3,12 +3,10 @@
 
 ## TODO
 
+- trigger "special update routine" to avoid tweaking out the display
 - make webui not ugly
 - add ability to display errors
-- fix restart on firmware upload
-- trigger "special update routine" to avoid tweaking out the display
-- add ability to change brightness (using button?)
-- dedicated chip for multiplexing?
+- add ability to change brightness (using button perchance?)
 
 ## Display Pinout
 ![](include/7seg.png)
