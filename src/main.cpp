@@ -7,9 +7,10 @@
 #include <time.h>
 #include <WiFi.h>
 
+#define DIGIT_COUNT 4
 #define EEPROM_SIZE 1024
 #define EEPROM_MAGIC 0xA55A1234
-#define REFRESH 2200 // microseconds per digit
+#define REFRESH 2200 // microseconds per digit. ~2.2 ms per digit is ~450 Hz refresh for 4 digits
 #define COLON_BLINK_INTERVAL 1000 // milliseconds
 
 struct EEPROMstorage {
@@ -21,6 +22,7 @@ struct EEPROMstorage {
 
 const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn ON)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
+uint8_t displayDigits[DIGIT_COUNT];
 const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
 const uint8_t led = 48;
 const long gmtOffset_sec = -7 * 3600; // MST
@@ -30,7 +32,6 @@ const char* ntpServer2 = "time.nist.gov";
 const char* hostname = "ntp-clock";
 const char* pass = "ntp-clock-pass";
 const unsigned long NTP_INTERVAL = 3600000UL;
-uint8_t displayDigits[5];
 bool colonOn = true;
 bool isPM = true;
 bool reboot = false;
@@ -167,7 +168,7 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
     String msg;
     if(save){
         msg = "<!DOCTYPE html><html><head>";
-        msg += "<meta http-equiv='refresh' content='1;url=/' />";  // redirect after 1 second
+        msg += "<meta http-equiv='refresh' content='1;url=/' />";
         msg += "<title>Saved! Rebooting...</title></head><body>";
         msg += "<h1>Saved! Rebooting...</h1>";
         msg += "</body></html>";
@@ -209,7 +210,7 @@ void setUpWebServer() {
     server.on("/", HTTP_POST, [](AsyncWebServerRequest *request){ handleWebServerRequest(request); });
     server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *request){
         String html = "<!DOCTYPE html><html><head>";
-        html += "<meta http-equiv='refresh' content='1;url=/' />"; // redirect after 1 second
+        html += "<meta http-equiv='refresh' content='1;url=/' />";
         html += "<title>Restarting...</title></head><body>";
         html += "<h1>Restarting...</h1>";
         html += "</body></html>";
@@ -271,7 +272,7 @@ void updateTime() {
             int minute = timeinfo.tm_min;
 
             if(config.use12HourFormat) {
-                isPM = (hour >= 12);
+                isPM = !(hour >= 12);
                 hour = hour % 12;
                 if(hour == 0) hour = 12;  // midnight/noon correction
             }
@@ -279,7 +280,7 @@ void updateTime() {
             displayDigits[1] = hour % 10;
             displayDigits[2] = minute / 10;
             displayDigits[3] = minute % 10;
-            displayDigits[4] = isPM ? 1 : 0;
+            //displayDigits[4] = isPM ? 1 : 0; BAD
         }
     }
 }
@@ -294,16 +295,16 @@ void updateColon() {
 }
 
 void display() {
-    for(uint8_t pos=0; pos<sizeof(displayDigits); pos++) {
+    for(size_t pos=0; pos<DIGIT_COUNT; pos++) {
         for(uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<sizeof(segPins);s++) {
                 if(m & (1<<s)) digitalWrite(segPins[s], LOW);
                 else digitalWrite(segPins[s], HIGH);
             }
-        digitalWrite(digitPins[pos], HIGH); // enable digit by driving anode HIGH
-        delayMicroseconds(REFRESH); // ~2.2 ms on time per digit, ~450 Hz refresh for 4 digits
+        digitalWrite(digitPins[pos], HIGH);
+        delayMicroseconds(REFRESH);
         digitalWrite(digitPins[pos], LOW);
-        for(uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly (optional)
+        for(uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly(?)
     }
 }
