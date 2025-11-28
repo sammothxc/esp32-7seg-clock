@@ -193,47 +193,46 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         save = true;
     }
     String msg;
+    msg = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     if (save) {
-        msg = "<!DOCTYPE html><html><head>";
         msg += "<meta http-equiv='refresh' content='1;url=/' />";
         msg += "<title>Saved! Rebooting...</title></head><body>";
-        msg += "<h1>Saved! Rebooting...</h1>";
-        msg += "</body></html>";
+        msg += "<div style='font-family:sans-serif;text-align:center;margin-top:50px;'>";
+        msg += "<h1 style='color:green;'>Configuration Saved!</h1>";
+        msg += "<p>Rebooting ESP...</p></div></body></html>";
     } else {
-        msg = "<!DOCTYPE html><html><head><title>NTP Clock Config</title></head><body>";
-        msg += "<h1>NTP Clock Config</h1><form action='/' method='POST'>";
-        msg += "<div>SSID:</div><input type='text' name='ssid' value='"+String(config.wifi_ssid)+"'/>";
-        msg += "<div>Password:</div><input type='password' name='password' value='"+String(config.wifi_password)+"'/>";
-        msg += "<div>Time Format:</div>";
-        msg += "<select name='tf'>";
-        msg += config.use12HourFormat ?
-                "<option value='24'>24-hour</option><option value='12' selected>12-hour</option>" :
-                "<option value='24' selected>24-hour</option><option value='12'>12-hour</option>";
-        msg += "</select>";
-        msg += "<div>PM Indicator (Decimal Point on 4th digit):</div>";
-        msg += "<label>";
+        msg += "<title>NTP Clock Configuration</title><style>";
+        msg += "body{font-family:Arial,sans-serif;background:#f4f4f4;color:#333;margin:0;padding:0;}";
+        msg += ".container{max-width:500px;margin:50px auto;padding:30px;background:#fff;border-radius:10px;box-shadow:0 0 15px rgba(0,0,0,0.1);}";
+        msg += "h1{text-align:center;color:#444;;margin-bottom:30px;}";
+        msg += "form div{margin-top:20px;margin-bottom:5px;}";
+        msg += "label{display:block;margin-bottom:5px;}";
+        msg += "input[type=text], input[type=password], select{width:100%;padding:8px;border:1px solid #ccc;border-radius:5px;}";
+        msg += "input[type=submit]{background:#007BFF;color:#fff;border:none;padding:12px 25px;border-radius:5px;cursor:pointer;font-size:16px;display:block;margin:20px auto;}";
+        msg += "input[type=submit]:hover{background:#0056b3;}";
+        msg += "hr{margin:30px 0;}";
+        msg += "</style></head><body><div class='container'>";
+        msg += "<h1>NTP Clock Configuration</h1>";
+        msg += "<form action='/restart' method='POST' style='text-align:center;'><input type='submit' value='Reboot Clock'/></form>";
+        msg += "<form action='/' method='POST'>";
+        msg += "<div><label>WiFi SSID:</label></div><input type='text' name='ssid' value='"+String(config.wifi_ssid)+"'/>";
+        msg += "<div><label>Password:</label></div><input type='password' name='password' value='"+String(config.wifi_password)+"'/>";
+        msg += "<div><label>Time Format:</label></div><select name='tf'>";
+        msg += config.use12HourFormat ? "<option value='24'>24-hour</option><option value='12' selected>12-hour</option></select>" :
+                "<option value='24' selected>24-hour</option><option value='12'>12-hour</option></select>";
+        msg += "<div><label>PM Indicator (Decimal Point on 4th digit):</label></div>";
         msg += "<input type='checkbox' name='dp' value='1' ";
         msg += (config.dpEnabled ? "checked" : "");
-        msg += "> Enable";
-        msg += "</label>";
-        msg += "<div>Colon (Decimal Point on 2nd digit):</div>";
-        msg += "<label>";
-        msg += "<input type='checkbox' name='colon' value='1' ";
+        msg += "> Enable</label>";
+        msg += "<div><label>Colon (Decimal Point on 2nd digit):</label></div>";
+        msg += "<label><input type='checkbox' name='colon' value='1' ";
         msg += (config.colonEnabled ? "checked" : "");
-        msg += "> Enable";
-        msg += "</label>";
-        msg += "<div>Colon Blink Interval:</div>";
-        msg += "<select name='cbi'>";
-        msg += config.colonBlinkSlow ?
-                "<option value='500'>0.5s</option><option value='1000' selected>1s</option>" :
-                "<option value='500' selected>0.5s</option><option value='1000'>1s</option>";
-        msg += "</select>";
-        msg += "<div><input type='submit' value='Save'/></div></form>";
-        msg += "<h2>Restart ESP</h2>";
-        msg += "<form action='/restart' method='POST'>";
-        msg += "<input type='submit' value='Restart'/>";
-        msg += "</form>";
-        msg += "</body></html>";
+        msg += "> Enable</label>";
+        msg += "<div><label>Colon Blink Interval:</label></div><select name='cbi'>";
+        msg += config.colonBlinkSlow ? "<option value='500'>0.5s</option><option value='1000' selected>1s</option>" :
+                "<option value='500' selected>0.5s</option><option value='1000'>1s</option></select>";
+        msg += "<input type='submit' value='Save Configuration + Reboot'/></form>";
+        msg += "</div></body></html>";
     }
     request->send(200,"text/html",msg);
     if (save) {
