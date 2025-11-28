@@ -3,7 +3,6 @@
 
 ## TODO
 
-- adjust colon blink
 - add ability to display errors
 - fix restart on firmware upload
 - trigger "special update routine" to avoid tweaking out the display
