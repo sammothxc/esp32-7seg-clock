@@ -18,6 +18,7 @@ struct EEPROMstorage {
     char wifi_ssid[50];
     char wifi_password[50];
     uint8_t use12HourFormat;
+    uint8_t DPenabled;
 };
 
 const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
@@ -118,6 +119,7 @@ void readConf() {
         strcpy(config.wifi_ssid, "your-ssid");
         strcpy(config.wifi_password, "your-password");
         config.use12HourFormat = false;
+        config.DPenabled = 1;
         writeConf();
     }
 }
@@ -152,21 +154,32 @@ void setUpAccessPoint() {
 }
 
 void handleWebServerRequest(AsyncWebServerRequest *request) {
-    bool save=false;
+    bool save = false;
     if(request->hasParam("ssid",true) && request->hasParam("password",true)) {
-        String s=request->getParam("ssid",true)->value();
-        String p=request->getParam("password",true)->value();
+        String s = request->getParam("ssid",true)->value();
+        String p = request->getParam("password",true)->value();
         s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
         p.toCharArray(config.wifi_password,sizeof(config.wifi_password));
-        writeConf(); save=true;
+        writeConf();
+        save = true;
     }
     if(request->hasParam("tf", true)) {
-        String tf=request->getParam("tf",true)->value();
+        String tf = request->getParam("tf",true)->value();
         config.use12HourFormat = (tf == "12");
-        writeConf(); save=true;
+        writeConf();
+        save = true;
+    }
+    if (request->method() == HTTP_POST) {
+        if (request->hasParam("dp", true)) {
+            config.DPenabled = 1;
+        } else {
+            config.DPenabled = 0;
+        }
+        writeConf();
+        save = true;
     }
     String msg;
-    if(save){
+    if(save) {
         msg = "<!DOCTYPE html><html><head>";
         msg += "<meta http-equiv='refresh' content='1;url=/' />";
         msg += "<title>Saved! Rebooting...</title></head><body>";
@@ -183,6 +196,12 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
                 "<option value='24'>24-hour</option><option value='12' selected>12-hour</option>" :
                 "<option value='24' selected>24-hour</option><option value='12'>12-hour</option>";
         msg += "</select>";
+        msg += "<div>PM Indicator (Decimal Point on 4th digit):</div>";
+        msg += "<label>";
+        msg += "<input type='checkbox' name='dp' value='1' ";
+        msg += (config.DPenabled ? "checked" : "");
+        msg += "> Enable";
+        msg += "</label>";
         msg += "<div><input type='submit' value='Save'/></div></form>";
         msg += "<h2>Restart ESP</h2>";
         msg += "<form action='/restart' method='POST'>";
@@ -299,7 +318,7 @@ void display() {
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<sizeof(segPins);s++) {
                 bool segmentOn = m & (1 << s);
-                if (pos == 3 && s == 7 && isPM) {
+                if (pos == 3 && s == 7 && !isPM && config.DPenabled) {
                     segmentOn = true;
                 }
                 digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
