@@ -3,7 +3,6 @@
 
 ## TODO
 
-- trigger "special update routine" to avoid tweaking out the display
 - make webui not ugly
 - add ability to display errors
 - add ability to change brightness (using button perchance?)
