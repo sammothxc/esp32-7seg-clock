@@ -1,11 +1,11 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include <EEPROM.h>
 #include <ElegantOTA.h>
+#include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <time.h>
-#include <EEPROM.h>
+#include <WiFi.h>
 
 #define EEPROM_SIZE 512
 #define EEPROM_MAGIC 0xA55A1234
