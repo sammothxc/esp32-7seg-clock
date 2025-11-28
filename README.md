@@ -3,6 +3,7 @@
 
 ## TODO
 
+- make webui not ugly
 - add ability to display errors
 - fix restart on firmware upload
 - trigger "special update routine" to avoid tweaking out the display
