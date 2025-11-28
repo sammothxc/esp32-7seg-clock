@@ -8,9 +8,8 @@
 #include <WiFi.h>
 
 #define TZ -7 // Mountain Time Zone (UTC-7)
-#define COLON_BLINK_INTERVAL 1000 // milliseconds
-#define DIGIT_COUNT 4
 
+#define DIGIT_COUNT 4
 #define EEPROM_SIZE 1024
 #define EEPROM_MAGIC 0xA55A1234
 #define REFRESH 2200 // microseconds per digit. ~2.2 ms per digit is ~450 Hz refresh for 4 digits
@@ -22,6 +21,7 @@ struct EEPROMstorage {
     uint8_t use12HourFormat;
     uint8_t dpEnabled;
     uint8_t colonEnabled;
+    uint8_t colonBlinkSlow;
 };
 
 const uint8_t segPins[8] = {1,2,3,4,5,6,7,8}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
@@ -123,6 +123,7 @@ void readConf() {
         config.use12HourFormat = 1;
         config.dpEnabled = 1;
         config.colonEnabled = 1;
+        config.colonBlinkSlow = 1;
         writeConf();
     }
 }
@@ -158,30 +159,26 @@ void setUpAccessPoint() {
 
 void handleWebServerRequest(AsyncWebServerRequest *request) {
     bool save = false;
-    if(request->hasParam("ssid",true) && request->hasParam("password",true)) {
-        String s = request->getParam("ssid",true)->value();
-        String p = request->getParam("password",true)->value();
-        s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
-        p.toCharArray(config.wifi_password,sizeof(config.wifi_password));
-        writeConf();
-        save = true;
-    }
-    if(request->hasParam("tf", true)) {
-        String tf = request->getParam("tf",true)->value();
-        config.use12HourFormat = (tf == "12");
-        writeConf();
-        save = true;
-    }
     if (request->method() == HTTP_POST) {
+        if(request->hasParam("ssid",true) && request->hasParam("password",true)) {
+            String s = request->getParam("ssid",true)->value();
+            String p = request->getParam("password",true)->value();
+            s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
+            p.toCharArray(config.wifi_password,sizeof(config.wifi_password));
+        }
+        if(request->hasParam("tf", true)) {
+            String tf = request->getParam("tf",true)->value();
+            config.use12HourFormat = (tf == "12");
+        }
+        if(request->hasParam("cbi", true)) {
+            String cbi = request->getParam("cbi",true)->value();
+            config.colonBlinkSlow = (cbi == "1000");
+        }
         if (request->hasParam("dp", true)) {
             config.dpEnabled = 1;
         } else {
             config.dpEnabled = 0;
         }
-        writeConf();
-        save = true;
-    }
-    if (request->method() == HTTP_POST) {
         if (request->hasParam("colon", true)) {
             config.colonEnabled = 1;
         } else {
@@ -220,6 +217,12 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         msg += (config.colonEnabled ? "checked" : "");
         msg += "> Enable";
         msg += "</label>";
+        msg += "<div>Colon Blink Interval:</div>";
+        msg += "<select name='cbi'>";
+        msg += config.colonBlinkSlow ?
+                "<option value='500'>0.5s</option><option value='1000' selected>1s</option>" :
+                "<option value='500' selected>0.5s</option><option value='1000'>1s</option>";
+        msg += "</select>";
         msg += "<div><input type='submit' value='Save'/></div></form>";
         msg += "<h2>Restart ESP</h2>";
         msg += "<form action='/restart' method='POST'>";
@@ -322,7 +325,7 @@ void updateTime() {
 }
 
 void updateColon() {
-    if (millis() - lastColonChange >= COLON_BLINK_INTERVAL) {
+    if (millis() - lastColonChange >= (config.colonBlinkSlow ? 1000 : 500)) {
         colonOn = !colonOn;
         lastColonChange = millis();
     }
