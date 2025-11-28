@@ -7,12 +7,6 @@
 - make an actual readme
 - case + build
 
-## Display Pinout
-![](include/7seg.png)
-
-## Alphabet
-![](include/7segment_alphabet.jpg)
-
 ## Error Codes
 
 - wifi: no wifi connected
@@ -20,3 +14,10 @@
 - sync: NTP sync failed
 - eepr: eeprom read error
 - mdns: mdns responder init failed
+
+## 7 Segment Alphabet
+![](include/7segment_alphabet.jpg)
+![](include/7segment_alphabet.png)
+
+## Display Pinout
+![](include/7seg.png)
