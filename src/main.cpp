@@ -71,6 +71,7 @@ void handleWebServerRequest(AsyncWebServerRequest *request);
 void startMDNS();
 void setUpWebServer();
 void wifiBlocker();
+void requestReboot();
 void rebootCheck();
 void NTPsync();
 void updateTime();
@@ -116,6 +117,7 @@ void readConf() {
     }
     if (config.magic != EEPROM_MAGIC) {
         Serial.println("EEPROM not initialized or corrupt. Loading defaults...");
+        //TODO errorCtrl();
         memset(&config, 0, sizeof(EEPROMstorage));
         config.magic = EEPROM_MAGIC;
         strcpy(config.wifi_ssid, "your-ssid");
@@ -146,6 +148,7 @@ bool connectToWiFi() {
         return true;
     } 
     Serial.println("Connection failed");
+    //TODO errorCtrl();
     return false;
 }
 
@@ -232,14 +235,14 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
     }
     request->send(200,"text/html",msg);
     if(save) {
-        reboot = true;
-        rebootAt = millis();
+        requestReboot();
     }
 }
 
 void startMDNS() {
     if(!MDNS.begin(hostname)) {
         Serial.println("Error setting up MDNS responder!");
+        //TODO errorCtrl();
         return;
     }
     Serial.println("mDNS responder started");
@@ -255,11 +258,24 @@ void setUpWebServer() {
         html += "<h1>Restarting...</h1>";
         html += "</body></html>";
         request->send(200, "text/html", html);
-        reboot = true;
-        rebootAt = millis();
+        requestReboot();
     });
     ElegantOTA.setAuth("admin", pass);
     ElegantOTA.begin(&server);
+    ElegantOTA.onStart([]() {
+        Serial.println("OTA update process started.");
+        // TODO update mode
+    });
+    ElegantOTA.onEnd([](bool success) {
+    if (success) {
+        Serial.println("OTA update completed successfully! Restarting...");
+        delay(500);
+        requestReboot();
+    } else {
+        Serial.println("OTA update failed :(");
+        //TODO errorCtrl();
+    }
+    });
     Serial.println("ElegantOTA server started");
     server.begin();
     Serial.println("Web server started");
@@ -270,6 +286,11 @@ void wifiBlocker() {
         delay(1000);
         digitalWrite(led, !digitalRead(led));
     }
+}
+
+void requestReboot() {
+    reboot = true;
+    rebootAt = millis();
 }
 
 void rebootCheck() {
@@ -295,6 +316,7 @@ void NTPsync() {
         while (!getLocalTime(&timeinfo)) {
             if(millis() - startAttempt > 3000) {
                 Serial.println("NTP sync failed.");
+                //TODO errorCtrl();
                 return;
             }
             delay(100);
