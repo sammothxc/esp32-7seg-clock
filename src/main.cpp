@@ -20,10 +20,10 @@ struct EEPROMstorage {
     uint8_t use12HourFormat;
 };
 
-const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn ON)
+const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn on segment)
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 uint8_t displayDigits[DIGIT_COUNT];
-const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
+const uint8_t colon = 8;
 const uint8_t led = 48;
 const long gmtOffset_sec = -7 * 3600; // MST
 const int daylightOffset_sec = 3600; // MDT
