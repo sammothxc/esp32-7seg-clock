@@ -73,6 +73,10 @@ void display();
 void setup() {
     Serial.begin(115200);
     Serial.println("Starting up...");
+    pinMode(led, OUTPUT);
+    digitalWrite(led, HIGH);
+    pinMode(colon, OUTPUT);
+    digitalWrite(colon, LOW);
     for(uint8_t i=0;i<7;i++){
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
@@ -81,9 +85,6 @@ void setup() {
         pinMode(digitPins[i], OUTPUT);
         digitalWrite(digitPins[i], LOW);
     }
-    pinMode(led, OUTPUT);
-    pinMode(colon, OUTPUT);
-    digitalWrite(colon, LOW);
     EEPROM.begin(EEPROM_SIZE);
     readConf();
     if(!connectToWiFi()){ setUpAccessPoint(); }
@@ -178,6 +179,10 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
                 "<option value='24' selected>24-hour</option><option value='12'>12-hour</option>";
         msg += "</select>";
         msg += "<div><input type='submit' value='Save'/></div></form>";
+        msg += "<h2>Restart ESP</h2>";
+        msg += "<form action='/restart' method='POST'>";
+        msg += "<input type='submit' value='Restart'/>";
+        msg += "</form>";
     }
     msg += "</body></html>";
 
@@ -201,6 +206,11 @@ void startMDNS() {
 void setUpWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ handleWebServerRequest(request); });
     server.on("/", HTTP_POST, [](AsyncWebServerRequest *request){ handleWebServerRequest(request); });
+    server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *request){
+        request->send(200, "text/html", "<h1>Restarting...</h1>");
+        reboot = true;
+        rebootAt = millis();
+    });
     ElegantOTA.setAuth("admin", pass);
     ElegantOTA.begin(&server);
     Serial.println("ElegantOTA server started");
@@ -210,12 +220,13 @@ void setUpWebServer() {
 
 void wifiBlocker() {
     while(!wifiConnected) {
-        delay(100);
+        delay(1000);
+        digitalWrite(led, !digitalRead(led));
     }
 }
 
 void rebootCheck() {
-    if(reboot && millis() >= rebootAt + 1000) {
+    if(reboot && millis() >= rebootAt + 2000) {
         server.end();
         delay(500);
         ESP.restart();
