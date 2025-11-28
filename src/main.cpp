@@ -40,10 +40,12 @@ bool colonOn = true;
 bool isPM = true;
 bool reboot = false;
 bool wifiConnected = false;
+bool otaInProgress = false;
 unsigned long lastColonChange = 0;
 unsigned long lastTimeUpdate = 0;
 unsigned long lastNTPSync = 0;
 unsigned long rebootAt = 0;
+unsigned long otaProgressMillis = 0;
 IPAddress AP_IP(10,1,1,1);
 IPAddress AP_subnet(255,255,255,0);
 AsyncWebServer server(80);
@@ -84,17 +86,17 @@ void setup() {
     pinMode(button, INPUT_PULLUP);
     pinMode(led, OUTPUT);
     digitalWrite(led, HIGH);
-    for(uint8_t i=0;i<sizeof(segPins);i++) {
+    for (uint8_t i=0;i<sizeof(segPins);i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
     }
-    for(uint8_t i=0;i<sizeof(digitPins);i++) {
+    for (uint8_t i=0;i<sizeof(digitPins);i++) {
         pinMode(digitPins[i], OUTPUT);
         digitalWrite(digitPins[i], LOW);
     }
     EEPROM.begin(EEPROM_SIZE);
     readConf();
-    if(!connectToWiFi()){ setUpAccessPoint(); }
+    if (!connectToWiFi()){ setUpAccessPoint(); }
     startMDNS();
     setUpWebServer();
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
@@ -142,7 +144,7 @@ bool connectToWiFi() {
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(hostname);
     WiFi.begin(config.wifi_ssid, config.wifi_password);
-    if(WiFi.waitForConnectResult() == WL_CONNECTED) {
+    if (WiFi.waitForConnectResult() == WL_CONNECTED) {
         Serial.print("Connected. IP: "); Serial.println(WiFi.localIP());
         wifiConnected = true;
         return true;
@@ -163,17 +165,17 @@ void setUpAccessPoint() {
 void handleWebServerRequest(AsyncWebServerRequest *request) {
     bool save = false;
     if (request->method() == HTTP_POST) {
-        if(request->hasParam("ssid",true) && request->hasParam("password",true)) {
+        if (request->hasParam("ssid",true) && request->hasParam("password",true)) {
             String s = request->getParam("ssid",true)->value();
             String p = request->getParam("password",true)->value();
             s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
             p.toCharArray(config.wifi_password,sizeof(config.wifi_password));
         }
-        if(request->hasParam("tf", true)) {
+        if (request->hasParam("tf", true)) {
             String tf = request->getParam("tf",true)->value();
             config.use12HourFormat = (tf == "12");
         }
-        if(request->hasParam("cbi", true)) {
+        if (request->hasParam("cbi", true)) {
             String cbi = request->getParam("cbi",true)->value();
             config.colonBlinkSlow = (cbi == "1000");
         }
@@ -191,7 +193,7 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         save = true;
     }
     String msg;
-    if(save) {
+    if (save) {
         msg = "<!DOCTYPE html><html><head>";
         msg += "<meta http-equiv='refresh' content='1;url=/' />";
         msg += "<title>Saved! Rebooting...</title></head><body>";
@@ -234,13 +236,13 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         msg += "</body></html>";
     }
     request->send(200,"text/html",msg);
-    if(save) {
+    if (save) {
         requestReboot();
     }
 }
 
 void startMDNS() {
-    if(!MDNS.begin(hostname)) {
+    if (!MDNS.begin(hostname)) {
         Serial.println("Error setting up MDNS responder!");
         //TODO errorCtrl();
         return;
@@ -264,17 +266,27 @@ void setUpWebServer() {
     ElegantOTA.begin(&server);
     ElegantOTA.onStart([]() {
         Serial.println("OTA update process started.");
-        // TODO update mode
+        otaInProgress = true;
+    });
+    ElegantOTA.onProgress([](size_t current, size_t final) {
+        if (millis() - otaProgressMillis > 1000) {
+            otaProgressMillis = millis();
+            Serial.printf("Progress: %u%%\n", (current * 100) / final);
+            digitalWrite(led, !digitalRead(led));
+        }
+        Serial.printf("Progress: %u%%\n", (current * 100) / final);
     });
     ElegantOTA.onEnd([](bool success) {
-    if (success) {
-        Serial.println("OTA update completed successfully! Restarting...");
-        delay(500);
-        requestReboot();
-    } else {
-        Serial.println("OTA update failed :(");
-        //TODO errorCtrl();
-    }
+        otaInProgress = false;
+        digitalWrite(led, LOW);
+        if (success) {
+            Serial.println("OTA update completed successfully! Restarting...");
+            delay(500);
+            requestReboot();
+        } else {
+            Serial.println("OTA update failed :(");
+            //TODO errorCtrl();
+        }
     });
     Serial.println("ElegantOTA server started");
     server.begin();
@@ -283,7 +295,7 @@ void setUpWebServer() {
 
 void wifiBlocker() {
     while(!wifiConnected) {
-        delay(1000);
+        delay(300);
         digitalWrite(led, !digitalRead(led));
     }
 }
@@ -294,7 +306,7 @@ void requestReboot() {
 }
 
 void rebootCheck() {
-    if(reboot && millis() >= rebootAt + 2000) {
+    if (reboot && millis() >= rebootAt + 2000) {
         server.end();
         delay(500);
         ESP.restart();
@@ -302,19 +314,19 @@ void rebootCheck() {
 }
 
 void NTPsync() {
-    if(millis() - lastNTPSync >= NTP_INTERVAL) {
+    if (millis() - lastNTPSync >= NTP_INTERVAL) {
         lastNTPSync = millis();
         unsigned long startAttempt = millis();
         struct tm timeinfo;
         Serial.println("NTP sync requested...");
-        if(WiFi.status() != WL_CONNECTED) {
+        if (WiFi.status() != WL_CONNECTED) {
             Serial.println("WiFi not connected, reconnecting...");
             WiFi.reconnect();
             delay(500);
             return;
         }
         while (!getLocalTime(&timeinfo)) {
-            if(millis() - startAttempt > 3000) {
+            if (millis() - startAttempt > 3000) {
                 Serial.println("NTP sync failed.");
                 //TODO errorCtrl();
                 return;
@@ -326,17 +338,17 @@ void NTPsync() {
 }
 
 void updateTime() {
-    if(millis() - lastTimeUpdate >= 1000) {
+    if (millis() - lastTimeUpdate >= 1000) {
         lastTimeUpdate = millis();
         struct tm timeinfo;
-        if(getLocalTime(&timeinfo)) {
+        if (getLocalTime(&timeinfo)) {
             int hour = timeinfo.tm_hour;
             int minute = timeinfo.tm_min;
 
-            if(config.use12HourFormat) {
+            if (config.use12HourFormat) {
                 isPM = (hour >= 12);
                 hour = hour % 12;
-                if(hour == 0) hour = 12;  // midnight/noon correction
+                if (hour == 0) hour = 12;  // midnight/noon correction
             }
             displayDigits[0] = hour / 10;
             displayDigits[1] = hour % 10;
@@ -354,24 +366,25 @@ void updateColon() {
 }
 
 void display() {
-    for(size_t pos=0; pos<DIGIT_COUNT; pos++) {
-        for(uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
-            uint8_t m = digits[displayDigits[pos]];
-            for(uint8_t s=0;s<sizeof(segPins);s++) {
-                bool segmentOn = m & (1 << s);
-                if (s == 7) {
-                    if (pos == 3 && config.dpEnabled) {
-                        segmentOn = isPM;
-                    }
-                    if (pos == 1 && config.colonEnabled) {
-                        segmentOn = colonOn;
-                    }
+    if (otaInProgress) return;
+    for (size_t pos=0; pos<DIGIT_COUNT; pos++) {
+        for (uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
+        uint8_t m = digits[displayDigits[pos]];
+        for (uint8_t s=0;s<sizeof(segPins);s++) {
+            bool segmentOn = m & (1 << s);
+            if (s == 7) {
+                if (pos == 3 && config.dpEnabled) {
+                    segmentOn = isPM;
                 }
-                digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
+                if (pos == 1 && config.colonEnabled) {
+                    segmentOn = colonOn;
+                }
             }
+            digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
+        }
         digitalWrite(digitPins[pos], HIGH);
         delayMicroseconds(REFRESH);
         digitalWrite(digitPins[pos], LOW);
-        for(uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly(?)
+        for (uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly(?)
     }
 }
