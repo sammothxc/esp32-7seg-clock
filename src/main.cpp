@@ -77,11 +77,11 @@ void setup() {
     digitalWrite(led, HIGH);
     pinMode(colon, OUTPUT);
     digitalWrite(colon, LOW);
-    for(uint8_t i=0;i<7;i++){
+    for(uint8_t i=0;i<7;i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
     }
-    for(uint8_t i=0;i<4;i++){
+    for(uint8_t i=0;i<4;i++) {
         pinMode(digitPins[i], OUTPUT);
         digitalWrite(digitPins[i], LOW);
     }
@@ -146,15 +146,11 @@ void setUpAccessPoint() {
     WiFi.softAPConfig(AP_IP, AP_IP, AP_subnet);
     WiFi.softAP(hostname, pass);
     Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
-    Serial.print("SoftAP SSID: "); Serial.println(WiFi.softAPSSID());
-    Serial.print("SoftAP IP: "); Serial.println(WiFi.softAPIP());
-    Serial.print("SoftAP Status: "); Serial.println(WiFi.softAPgetStationNum()); // stations connected
-
 }
 
 void handleWebServerRequest(AsyncWebServerRequest *request) {
     bool save=false;
-    if(request->hasParam("ssid",true) && request->hasParam("password",true)){
+    if(request->hasParam("ssid",true) && request->hasParam("password",true)) {
         String s=request->getParam("ssid",true)->value();
         String p=request->getParam("password",true)->value();
         s.toCharArray(config.wifi_ssid,sizeof(config.wifi_ssid));
@@ -166,9 +162,15 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         config.use12HourFormat = (tf == "12");
         writeConf(); save=true;
     }
-    String msg = "<!DOCTYPE html><html><head><title>NTP Clock Config</title></head><body>";
-    if(save){ msg += "<div>Saved! Rebooting...</div>"; } 
-    else{
+    String msg;
+    if(save){
+        msg = "<!DOCTYPE html><html><head>";
+        msg += "<meta http-equiv='refresh' content='1;url=/' />";  // redirect after 1 second
+        msg += "<title>Saved! Rebooting...</title></head><body>";
+        msg += "<h1>Saved! Rebooting...</h1>";
+        msg += "</body></html>";
+    } else {
+        msg = "<!DOCTYPE html><html><head><title>NTP Clock Config</title></head><body>";
         msg += "<h1>NTP Clock Config</h1><form action='/' method='POST'>";
         msg += "<div>SSID:</div><input type='text' name='ssid' value='"+String(config.wifi_ssid)+"'/>";
         msg += "<div>Password:</div><input type='password' name='password' value='"+String(config.wifi_password)+"'/>";
@@ -183,15 +185,12 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
         msg += "<form action='/restart' method='POST'>";
         msg += "<input type='submit' value='Restart'/>";
         msg += "</form>";
+        msg += "</body></html>";
     }
-    msg += "</body></html>";
-
     request->send(200,"text/html",msg);
     if(save) {
-        request->client()->close();
         reboot = true;
         rebootAt = millis();
-        return;
     }
 }
 
