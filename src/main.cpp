@@ -207,7 +207,12 @@ void setUpWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ handleWebServerRequest(request); });
     server.on("/", HTTP_POST, [](AsyncWebServerRequest *request){ handleWebServerRequest(request); });
     server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", "<h1>Restarting...</h1>");
+        String html = "<!DOCTYPE html><html><head>";
+        html += "<meta http-equiv='refresh' content='1;url=/' />"; // redirect after 1 second
+        html += "<title>Restarting...</title></head><body>";
+        html += "<h1>Restarting...</h1>";
+        html += "</body></html>";
+        request->send(200, "text/html", html);
         reboot = true;
         rebootAt = millis();
     });
