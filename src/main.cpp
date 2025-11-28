@@ -9,6 +9,7 @@
 
 #define EEPROM_SIZE 512
 #define EEPROM_MAGIC 0xA55A1234
+#define REFRESH 2200 // microseconds per digit
 
 struct EEPROMstorage {
     uint32_t magic;
@@ -249,15 +250,10 @@ void updateTime() {
 
 void updateColon() {
     unsigned long now = millis();
-    if(colonOn && now - lastColonChange >= 1000) {
-        colonOn = false;
+    if (now - lastColonChange >= 1000) {
+        colonOn = !colonOn;
         lastColonChange = now;
-        digitalWrite(colon, LOW);
-    }
-    else if(!colonOn && now - lastColonChange >= 1000) {
-        colonOn = true;
-        lastColonChange = now;
-        digitalWrite(colon, HIGH);
+        digitalWrite(colon, colonOn ? HIGH : LOW);
     }
 }
 
@@ -270,7 +266,7 @@ void display() {
                 else digitalWrite(segPins[s], HIGH);
             }
         digitalWrite(digitPins[pos], HIGH); // enable digit by driving anode HIGH
-        delayMicroseconds(2200); // ~2.2 ms on time per digit, ~450 Hz refresh for 4 digits
+        delayMicroseconds(REFRESH); // ~2.2 ms on time per digit, ~450 Hz refresh for 4 digits
         digitalWrite(digitPins[pos], LOW);
         for(uint8_t s=0;s<7;s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly (optional)
     }
