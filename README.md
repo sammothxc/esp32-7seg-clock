@@ -3,7 +3,6 @@
 
 ## TODO
 
-- add button for "so many activities"
 - adjust colon blink
 - add ability to display errors
 - fix restart on firmware upload
