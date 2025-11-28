@@ -9,11 +9,11 @@
 
 ## Error Codes
 
-- wifi: no wifi connected
-- fail: OTA update failed
-- sync: NTP sync failed
-- eepr: eeprom read error
-- mdns: mdns responder init failed
+- WiFi: no wifi connected
+- FAiL: OTA update failed
+- SynC: NTP sync failed
+- EEPr: eeprom read error
+- MdnS: mdns responder init failed
 
 ## 7 Segment Alphabet
 ![](include/7segment_alphabet.jpg)
