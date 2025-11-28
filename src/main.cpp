@@ -14,8 +14,7 @@ struct EEPROMstorage {
     uint32_t magic;
     char wifi_ssid[50];
     char wifi_password[50];
-    bool use12HourFormat;
-    char cstr_terminator = 0;
+    uint8_t use12HourFormat;
 };
 
 const long gmtOffset_sec = -7 * 3600; // MST
@@ -28,7 +27,7 @@ const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, driv
 const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
 const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
 const unsigned long NTP_INTERVAL = 3600000UL;
-uint8_t displayDigits[4] = {8,8,8,8}; // 88:88 digit test
+uint8_t displayDigits[4];
 bool colonOn = true;
 bool reboot = false;
 unsigned long lastColonChange = 0;
@@ -180,11 +179,9 @@ void handleWebServerRequest(AsyncWebServerRequest *request) {
 }
 
 void startMDNS() {
-    if(!MDNS.begin(hostname)) { //http://ntp-clock.local
+    if(!MDNS.begin(hostname)) {
         Serial.println("Error setting up MDNS responder!");
-        while (1) {
-        delay(1000);
-        }
+        return;
     }
     Serial.println("mDNS responder started");
 }
@@ -201,6 +198,8 @@ void setUpWebServer() {
 
 void rebootCheck() {
     if(reboot && millis() >= rebootAt + 1000) {
+        server.end();
+        delay(500);
         ESP.restart();
     }
 }
@@ -220,7 +219,7 @@ void NTPsync() {
         while (!getLocalTime(&timeinfo)) {
             if(millis() - startAttempt > 3000) {
                 Serial.println("NTP sync failed.");
-                return;  // fail gracefully
+                return;
             }
             delay(100);
         }
@@ -264,7 +263,7 @@ void updateColon() {
 
 void display() {
     for(uint8_t pos=0; pos<4; pos++) {
-        for(uint8_t i=0;i<4;i++) digitalWrite(digitPins[i], LOW); // ensure digits off
+        for(uint8_t i=0;i<4;i++) digitalWrite(digitPins[i], LOW);
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<7;s++) {
                 if(m & (1<<s)) digitalWrite(segPins[s], LOW);
@@ -272,7 +271,7 @@ void display() {
             }
         digitalWrite(digitPins[pos], HIGH); // enable digit by driving anode HIGH
         delayMicroseconds(2200); // ~2.2 ms on time per digit, ~450 Hz refresh for 4 digits
-        digitalWrite(digitPins[pos], LOW); // turn off
+        digitalWrite(digitPins[pos], LOW);
         for(uint8_t s=0;s<7;s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly (optional)
     }
 }
