@@ -7,6 +7,7 @@
 - add button for snooze
 - add ability to display errors
 - fix restart on firmware upload
+- trigger "special update routine" to avoid tweaking out the display
 - add ability to change brightness (using button?)
 - dedicated chip for multiplexing?
 

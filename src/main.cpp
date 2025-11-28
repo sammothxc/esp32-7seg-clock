@@ -272,7 +272,7 @@ void updateTime() {
             int minute = timeinfo.tm_min;
 
             if(config.use12HourFormat) {
-                isPM = !(hour >= 12);
+                isPM = (hour >= 12);
                 hour = hour % 12;
                 if(hour == 0) hour = 12;  // midnight/noon correction
             }
@@ -280,7 +280,6 @@ void updateTime() {
             displayDigits[1] = hour % 10;
             displayDigits[2] = minute / 10;
             displayDigits[3] = minute % 10;
-            //displayDigits[4] = isPM ? 1 : 0; BAD
         }
     }
 }
@@ -299,8 +298,11 @@ void display() {
         for(uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<sizeof(segPins);s++) {
-                if(m & (1<<s)) digitalWrite(segPins[s], LOW);
-                else digitalWrite(segPins[s], HIGH);
+                bool segmentOn = m & (1 << s);
+                if (pos == 3 && s == 7 && isPM) {
+                    segmentOn = true;
+                }
+                digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
             }
         digitalWrite(digitPins[pos], HIGH);
         delayMicroseconds(REFRESH);
