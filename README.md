@@ -3,7 +3,6 @@
 
 ## TODO
 
-- make webui not ugly
 - add ability to display errors
 - add ability to change brightness (using button perchance?)
 
