@@ -4,7 +4,10 @@
 ## TODO
 
 - add decimal point for PM indicator
-- multiplexing?
+- add button for snooze
+- add ability to display errors
+- add ability to change brightness (using button?)
+- dedicated chip for multiplexing?
 
 ## Display Pinout
 ![](include/7seg.png)

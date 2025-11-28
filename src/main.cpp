@@ -10,6 +10,7 @@
 #define EEPROM_SIZE 1024
 #define EEPROM_MAGIC 0xA55A1234
 #define REFRESH 2200 // microseconds per digit
+#define COLON_BLINK_INTERVAL 1000 // milliseconds
 
 struct EEPROMstorage {
     uint32_t magic;
@@ -18,19 +19,20 @@ struct EEPROMstorage {
     uint8_t use12HourFormat;
 };
 
+const uint8_t segPins[8] = {1,2,3,4,5,6,7,13}; // a,b,c,d,e,f,g,dp (cathode pins, drive LOW to turn ON)
+const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
+const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
+const uint8_t led = 48;
 const long gmtOffset_sec = -7 * 3600; // MST
 const int daylightOffset_sec = 3600; // MDT
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
 const char* hostname = "ntp-clock";
 const char* pass = "ntp-clock-pass";
-const uint8_t segPins[7] = {1,2,3,4,5,6,7}; // a,b,c,d,e,f,g (cathode pins, drive LOW to turn ON)
-const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable digit)
-const uint8_t colon = 8; // colon pin (drive HIGH to turn ON)
-const uint8_t led = 48;
 const unsigned long NTP_INTERVAL = 3600000UL;
-uint8_t displayDigits[4];
+uint8_t displayDigits[5];
 bool colonOn = true;
+bool isPM = true;
 bool reboot = false;
 bool wifiConnected = false;
 unsigned long lastColonChange = 0;
@@ -77,11 +79,11 @@ void setup() {
     digitalWrite(led, HIGH);
     pinMode(colon, OUTPUT);
     digitalWrite(colon, LOW);
-    for(uint8_t i=0;i<7;i++) {
+    for(uint8_t i=0;i<sizeof(segPins);i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
     }
-    for(uint8_t i=0;i<4;i++) {
+    for(uint8_t i=0;i<sizeof(digitPins);i++) {
         pinMode(digitPins[i], OUTPUT);
         digitalWrite(digitPins[i], LOW);
     }
@@ -269,6 +271,7 @@ void updateTime() {
             int minute = timeinfo.tm_min;
 
             if(config.use12HourFormat) {
+                isPM = (hour >= 12);
                 hour = hour % 12;
                 if(hour == 0) hour = 12;  // midnight/noon correction
             }
@@ -276,13 +279,14 @@ void updateTime() {
             displayDigits[1] = hour % 10;
             displayDigits[2] = minute / 10;
             displayDigits[3] = minute % 10;
+            displayDigits[4] = isPM ? 1 : 0;
         }
     }
 }
 
 void updateColon() {
     unsigned long now = millis();
-    if (now - lastColonChange >= 1000) {
+    if (now - lastColonChange >= COLON_BLINK_INTERVAL) {
         colonOn = !colonOn;
         lastColonChange = now;
         digitalWrite(colon, colonOn ? HIGH : LOW);
@@ -290,16 +294,16 @@ void updateColon() {
 }
 
 void display() {
-    for(uint8_t pos=0; pos<4; pos++) {
-        for(uint8_t i=0;i<4;i++) digitalWrite(digitPins[i], LOW);
+    for(uint8_t pos=0; pos<sizeof(displayDigits); pos++) {
+        for(uint8_t i=0;i<sizeof(digitPins);i++) digitalWrite(digitPins[i], LOW);
             uint8_t m = digits[displayDigits[pos]];
-            for(uint8_t s=0;s<7;s++) {
+            for(uint8_t s=0;s<sizeof(segPins);s++) {
                 if(m & (1<<s)) digitalWrite(segPins[s], LOW);
                 else digitalWrite(segPins[s], HIGH);
             }
         digitalWrite(digitPins[pos], HIGH); // enable digit by driving anode HIGH
         delayMicroseconds(REFRESH); // ~2.2 ms on time per digit, ~450 Hz refresh for 4 digits
         digitalWrite(digitPins[pos], LOW);
-        for(uint8_t s=0;s<7;s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly (optional)
+        for(uint8_t s=0;s<sizeof(segPins);s++) digitalWrite(segPins[s], HIGH); // turn segments off to avoid ghosting if switching anodes quickly (optional)
     }
 }
