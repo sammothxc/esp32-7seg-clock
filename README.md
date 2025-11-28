@@ -6,6 +6,7 @@
 - add decimal point for PM indicator
 - add button for snooze
 - add ability to display errors
+- fix restart on firmware upload
 - add ability to change brightness (using button?)
 - dedicated chip for multiplexing?
 
