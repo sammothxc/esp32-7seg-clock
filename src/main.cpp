@@ -7,11 +7,13 @@
 #include <time.h>
 #include <WiFi.h>
 
+#define TZ -7 // Mountain Time Zone (UTC-7)
+#define COLON_BLINK_INTERVAL 1000 // milliseconds
 #define DIGIT_COUNT 4
+
 #define EEPROM_SIZE 1024
 #define EEPROM_MAGIC 0xA55A1234
 #define REFRESH 2200 // microseconds per digit. ~2.2 ms per digit is ~450 Hz refresh for 4 digits
-#define COLON_BLINK_INTERVAL 1000 // milliseconds
 
 struct EEPROMstorage {
     uint32_t magic;
@@ -26,7 +28,8 @@ const uint8_t digitPins[4] = {9,10,11,12}; // anode pins (drive HIGH to enable d
 uint8_t displayDigits[DIGIT_COUNT];
 const uint8_t colon = 8;
 const uint8_t led = 48;
-const long gmtOffset_sec = -7 * 3600; // MST
+const uint8_t button = 0;
+const long gmtOffset_sec = TZ * 3600; // MST
 const int daylightOffset_sec = 3600; // MDT
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
@@ -77,6 +80,7 @@ void display();
 void setup() {
     Serial.begin(115200);
     Serial.println("Starting up...");
+    pinMode(button, INPUT_PULLUP);
     pinMode(led, OUTPUT);
     digitalWrite(led, HIGH);
     pinMode(colon, OUTPUT);
