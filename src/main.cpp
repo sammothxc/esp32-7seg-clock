@@ -32,6 +32,7 @@ const unsigned long NTP_INTERVAL = 3600000UL;
 uint8_t displayDigits[4];
 bool colonOn = true;
 bool reboot = false;
+bool wifiConnected = false;
 unsigned long lastColonChange = 0;
 unsigned long lastTimeUpdate = 0;
 unsigned long lastNTPSync = 0;
@@ -62,8 +63,9 @@ void setUpAccessPoint();
 void handleWebServerRequest(AsyncWebServerRequest *request);
 void startMDNS();
 void setUpWebServer();
-void NTPsync();
+void wifiBlocker();
 void rebootCheck();
+void NTPsync();
 void updateTime();
 void updateColon();
 void display();
@@ -90,11 +92,12 @@ void setup() {
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
     NTPsync();
     digitalWrite(led, LOW);
+    wifiBlocker();
 }
 
 void loop() {
-    NTPsync();
     rebootCheck();
+    NTPsync();
     updateTime();
     updateColon();
     display();
@@ -129,6 +132,7 @@ bool connectToWiFi() {
     WiFi.begin(config.wifi_ssid, config.wifi_password);
     if(WiFi.waitForConnectResult() == WL_CONNECTED) {
         Serial.print("Connected. IP: "); Serial.println(WiFi.localIP());
+        wifiConnected = true;
         return true;
     } 
     Serial.println("Connection failed");
@@ -198,6 +202,12 @@ void setUpWebServer() {
     Serial.println("ElegantOTA server started");
     server.begin();
     Serial.println("Web server started");
+}
+
+void wifiBlocker() {
+    while(!wifiConnected) {
+        delay(100);
+    }
 }
 
 void rebootCheck() {
