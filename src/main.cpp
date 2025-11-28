@@ -318,7 +318,7 @@ void display() {
             uint8_t m = digits[displayDigits[pos]];
             for(uint8_t s=0;s<sizeof(segPins);s++) {
                 bool segmentOn = m & (1 << s);
-                if (pos == 3 && s == 7 && !isPM && config.DPenabled) {
+                if (pos == 3 && s == 7 && isPM && config.DPenabled) {
                     segmentOn = true;
                 }
                 digitalWrite(segPins[s], segmentOn ? LOW : HIGH);
