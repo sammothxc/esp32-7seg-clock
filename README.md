@@ -3,7 +3,6 @@
 
 ## TODO
 
-- add decimal point for PM indicator
 - add button for snooze
 - add ability to display errors
 - fix restart on firmware upload
