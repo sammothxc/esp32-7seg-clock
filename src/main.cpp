@@ -42,8 +42,6 @@ struct EEPROMstorage {
     uint8_t colonBlinkSlow;
 };
 
-
-
 enum ErrorType {
     ERR_NONE,
     ERR_WIFI,
@@ -142,9 +140,9 @@ uint8_t charTo7Seg(char c);
 void setup() {
     Serial.begin(115200);
     Serial.println("Starting up...");
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
     for (uint8_t i=0;i<sizeof(segPins);i++) {
         pinMode(segPins[i], OUTPUT);
         digitalWrite(segPins[i], HIGH);
